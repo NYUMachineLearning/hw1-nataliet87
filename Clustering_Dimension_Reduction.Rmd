@@ -22,11 +22,12 @@ library(ggplot2)
 library(tidyverse)
 library(ggfortify)
 library(fastICA)
+
 ```
 
 ```{r}
 # read in Auto data
-Auto_data <- read_csv("/Users/ay1392/Desktop/Auto.csv")
+Auto_data <- read_csv("/Users/Natalie/Desktop/sackler_fall2019/machine_learning/ML_hw1/Auto.csv")
 
 #remove cars with unknown horsepower and set horsepower to numeric
 Auto_data <- Auto_data %>% 
@@ -66,9 +67,9 @@ Step 1. Each car is a cluster.
 Step 2. Create a distance matrix from Auto_data_clust.
 
 ```{r}
-help("dist")
+#help("dist")
 hierarchical_dist <- as.matrix(dist(Auto_data_clust, method = "euclidean"))
-#View(hierarchical_dist)
+View(hierarchical_dist)
 ```
 
 Step 3. Find the two cars that are the most similar to each other and print the names of those two cars
@@ -126,14 +127,19 @@ There is one more element to hierarchical clustering: Cutting the tree. Here, we
 tree <- hclust(hierarchical_dist, method="average")
 plot(tree)
 tree_k2 <- cutree(tree, k = 2)
+
 # plot the tree before running this line 
 rect.hclust(tree, k = 3, h = NULL)
+
 ```
 
 
 \newpage
 
 ## Principal Components Analysis (PCA)
+
+KEEP IN MIND THAT IN PCA YOU CAN LOOK AT HOW MANY COMPENETS EXPLAIN WHAT PERCENTAGE OF THE VARIANCE; THIS ISN'T POSSIBLE WITH ICA SO YOU CAN'T NECESSARILY SEE HOW WELL YOU'VE EXPLAINED THE VARIANCE IN YOUR DATA
+(ICA IS GENERALLY MORE TRYING TO SPLIT SIGNALS APART??)
 
 Principal Components Analysis is a linear dimensionality reduction algorithm. If you want to learn more about linear algebra, I suggest the MIT Open Courseware class here : https://ocw.mit.edu/courses/mathematics/18-06-linear-algebra-spring-2010/
 There are two ways of doing PCA, Single Value Decomposition (SVD), and the method we will use today, using the covariance matrix of the data. 
@@ -265,30 +271,246 @@ heatmap(a$S)
 
 \newpage
 
+
+
 ## Homework
 
 ```{r}
 data(iris)
+library(randomizr)
+iris
 ```
 
 0. Subset the Iris dataset to only include `Sepal.Length`, `Sepal.Width`, `Petal.Length`, and `Petal.Width`. 
+```{r}
+iris1 <- iris %>% select(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width)
+```
 
 1. Write out the Kmeans algorithm by hand, and run two iterations of it. 
 
+Kmeans algorithm: randomly assign a number, from 1 to K, to each observation. These serve as initial cluster assignments for the observations.
+
+
+```{r}
+# randomly assign each observation to a cluster, k
+k = 3
+k_iris <- iris1 %>% mutate(cluster = simple_ra(150, num_arms = k, conditions = c(1:k)))
+head(k_iris)
+
+# compute the cluster centroid of each cluster, k
+clusters <- k_iris %>% 
+  group_by(cluster) %>%
+  summarize(sepal_len_mean = mean(Sepal.Length), sepal_width_mean = mean(Sepal.Width), 
+            petal_len_mean = mean(Petal.Length), petal_width_mean = mean(Petal.Width))
+
+clusters
+```
+
+
+
+Assign each observation to the cluster whose centroid is closest (defined with euclidian distance):
+```{r}
+# check distance from each observation to the centroid of each cluster:
+
+# build a new df to hold the distances to clusters for each observation
+cluster_dist = k_iris[,FALSE]
+
+for (i in 1:k) {
+  # set up columns for each cluster k in distance df
+  colname <- paste("dist", i , sep="_")
+  cluster_dist[, colname] <- NA
+  
+  # calculate the distance from each observation to each cluster, k
+  cluster_dist <- cluster_dist %>% mutate(!!colname := (
+    (clusters$sepal_len_mean[i] - k_iris$Sepal.Length)**2 +
+      (clusters$sepal_width_mean[i] - k_iris$Sepal.Width)**2 +
+      (clusters$petal_len_mean[i] - k_iris$Petal.Length)**2 +
+      (clusters$petal_width_mean[i] - k_iris$Petal.Width)**2
+    ))
+}
+
+head(cluster_dist)
+
+# select shortest distance from observation to cluster and assign observation to that cluster
+for (i in 1:nrow(cluster_dist)) {
+  x <- which.min(as.numeric(cluster_dist[i,]))
+  k_iris[i,'cluster'] = x
+}
+
+# look at new cluster assignments
+k_iris %>% arrange(cluster)
+
+```
+
+
+```{r}
+# second iteration of kmeans clustering as above:
+
+# compute new cluster centroids for each cluster, k
+clusters <- k_iris %>% 
+  group_by(cluster) %>%
+  summarize(sepal_len_mean = mean(Sepal.Length), sepal_width_mean = mean(Sepal.Width), 
+            petal_len_mean = mean(Petal.Length), petal_width_mean = mean(Petal.Width))
+
+
+for (i in 1:k) {
+  colname <- paste("dist", i , sep="_")
+  cluster_dist[, colname] <- NA
+  
+  # calculate the distance from each observation to each cluster, k
+  cluster_dist <- cluster_dist %>% mutate(!!colname := (
+    (clusters$sepal_len_mean[i] - k_iris$Sepal.Length)**2 +
+      (clusters$sepal_width_mean[i] - k_iris$Sepal.Width)**2 +
+      (clusters$petal_len_mean[i] - k_iris$Petal.Length)**2 +
+      (clusters$petal_width_mean[i] - k_iris$Petal.Width)**2
+    ))
+}
+
+# select shortest distance from observation to cluster and assign observation to that cluster
+for (i in 1:nrow(cluster_dist)) {
+  x <- which.min(as.numeric(cluster_dist[i,]))
+  k_iris[i,'cluster'] = x
+}
+
+# look at new cluster assignments
+head(k_iris %>% arrange(cluster))
+```
+
+ 
+
+
+
+
 2. Run PCA on the Iris dataset. Plot a scatter plot of PC1 vs PC2 and include the percent variance those PCs describe. 
 
+```{r}
+# ran through step-by-step here:
+
+# Step 1.Center the data by subtracting the mean of the each column from the values in that column
+center_iris <- data.matrix(iris1) %>% apply(2, function(x) x - mean(x))
+
+# Step 2. Calculate covariance matrix of the data
+covariance_iris <- cov(center_iris)
+
+#Step 3.Calculate eigen values and vectors
+eigen_value_iris <- eigen(covariance_iris)$value
+
+#columns are the eigen vectors
+eigen_vector_iris <- eigen(covariance_iris)$vector
+
+#Step 4.Multiply the eigen vector matrix by the original data. 
+PC <- as.data.frame(data.matrix(center_iris) %*% eigen_vector_iris)
+
+ggplot(PC, aes(PC[,1], PC[,2])) + geom_point(aes(PC[,1], PC[,2])) +
+  ggtitle("Iris PC1 vs PC2")
+```
+
+
+```{r}
+# explaining proportion of variance:
+pca <- prcomp(iris1, scale = TRUE)
+summary(pca)
+```
+**The first two PCs together explain 95.81% of variance**
+
+
+
 3. Run ICA on the Iris dataset. Plot the independent components as a heatmap.
+```{r}
+a <- fastICA(iris1, 3, alg.typ = "parallel", fun = "logcosh", alpha = 1,
+             method = "R", row.norm = FALSE, maxit = 200,
+             tol = 0.0001, verbose = TRUE)
+
+heatmap(a$S)
+```
+
 
 4. Use Kmeans to cluster the Iris data. 
+```{r}
+library(cluster)
+```
   * Use the silhouette function in the cluster package to find the optimal number of clusters for kmeans for the iris dataset. Then cluster using kmeans clustering. Does the data cluster by species? 
+  
+**The data does not cluster by species-- there are three different species and the data is optimally split into two clusters.**
+  
   * Using this clustering, color the PCA plot according to the clusters.
+```{r}
+# function generates the silhouette widths for any number of clusters, k:
+silhouette_func <- function(k){
+  # first runs kmeans for k number of clusters
+  k_cluster <- kmeans(iris1, centers = k, nstart=25)
+  # then checks the silhouette widths for k clusters
+  sil <- silhouette(k_cluster$cluster, dist(iris1))
+  # averages those silhouette widths so we can generate a useful comparative plot
+  mean(sil[, 3])
+}
+
+# checking on silhouette widths for between 2 and 8 clusters:
+k <- 2:8
+avg_sil <- sapply(k, silhouette_func)  # apply the function above
+
+# plot the average silhouette widths to select the optimum number of clusters
+# peak of plot will be optimal k
+plot(k, type='b', avg_sil, xlab='Number of clusters', ylab='Average Silhouette Scores', frame=FALSE)
+
+# optimal k = 2, so run kmeans with k = 2
+k_cluster <- kmeans(iris1, centers = 2, nstart=25)
+
+# colored PCA plot
+ggplot(PC, aes(PC[,1], PC[,2], color = as.factor(k_cluster$cluster))) + 
+  geom_point(aes(PC[,1], PC[,2])) +
+  ggtitle("Iris PC1 vs PC2, colored by kmeans clustering") +
+  labs(col = "clusters") + 
+  scale_colour_manual(values = c("Blue", "Green"))
+```
+
+
   
 5. Use hierarchical clustering to cluster the Iris data.
 
   * Try two different linkage types, and two different distance metrics. 
   * For one linkage type and one distance metric, try two different cut points. 
   * Using this clustering, color the PCA plot according to the clusters. (6  plots in total)
-  
+```{r}
+# Linkage: complete; Distance metric: euclidean
+tree <- dist(iris1, method = "euclidean") %>%
+  hclust(method="complete")
+plot(tree, main = "Complete hierarchical iris clusters; euclidean distance metric")
+
+# Linkage: complete; Distance metric: canberra
+tree <- dist(iris1, method = "canberra") %>%
+  hclust(method="complete")
+plot(tree, main = "Complete hierarchical iris clusters; canberra distance metric")
+
+# Linkage: centroid; Distance metric: canberra
+tree <- dist(iris1, method = "canberra") %>%
+  hclust(method="centroid")
+plot(tree, main = "Centroid hierarchical iris clusters; canberra distance metric")
+
+# Linkage: centroid; Distance metric: euclidean
+tree <- dist(iris1, method = "euclidean") %>%
+  hclust(method="centroid")
+plot(tree, main = "Centroid hierarchical iris clusters; euclidean distance metric. Cut k=5")
+
+# Looking at cut points in Centroid clusters with euclidean distance:
+rect.hclust(tree, k = 5, h = NULL)
+
+plot(tree, main = "Centroid hierarchical iris clusters; euclidean distance metric. Cut k=2")
+rect.hclust(tree, k = 2, h = NULL)
+
+# make list for coloring PCA plot:
+tree_k2 <- cutree(tree, k = 2)
+
+# colored PCA plot
+ggplot(PC, aes(PC[,1], PC[,2], color = as.factor(tree_k2))) +
+  geom_point(aes(PC[,1], PC[,2])) +
+  ggtitle("Iris PC1 vs PC2, colored by hierarchical clustering") +
+  labs(col = "clusters") +
+  scale_colour_manual(values = c("Orange", "Purple"))
+```
+
+
+
 
 # Optional material
 On PCA:
