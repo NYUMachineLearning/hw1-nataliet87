@@ -1,6 +1,6 @@
 ---
 title: "Unsupervised learning - clustering and dimension reduction"
-author: "Anna Yeaton"
+author: "Natalie Thornton"
 date: "Fall 2019"
 output:
   html_document:
@@ -275,7 +275,7 @@ heatmap(a$S)
 
 ## Homework
 
-```{r}
+```{r, results="hide"}
 data(iris)
 library(randomizr)
 iris
@@ -416,14 +416,15 @@ summary(pca)
 
 
 3. Run ICA on the Iris dataset. Plot the independent components as a heatmap.
-```{r}
+```{r, results="hide"}
 a <- fastICA(iris1, 3, alg.typ = "parallel", fun = "logcosh", alpha = 1,
              method = "R", row.norm = FALSE, maxit = 200,
              tol = 0.0001, verbose = TRUE)
-
-heatmap(a$S)
 ```
 
+```{r}
+heatmap(a$S)
+```
 
 4. Use Kmeans to cluster the Iris data. 
 ```{r}
